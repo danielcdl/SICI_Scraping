@@ -3,6 +3,8 @@ import os
 import sqlite3
 from tqdm import tqdm
 
+lista = []
+
 client = Client('http://sici.rio.rj.gov.br/Servico/WebServiceSICI.asmx?wsdl')
 
 retorno = client.service.Get_Arvore_UA(Codigo_UA='', Nivel='', Tipo_Arvore='', consumidor='', chaveAcesso='')
@@ -19,11 +21,9 @@ for folha in tqdm(arvore):
         Codigo_UA=folha['cd_ua']
     )
     detalhes_parseados = [{campo.tag:campo.text for campo in item} for item in detalhes]
-    for i in detalhes:
-        for campo2 in i:
-            print(campo2.text.split)
-#    folha['titularidade'] = detalhes_parseados[0]
-    break
+    folha['titularidade'] = detalhes_parseados[0]
+    for chave, valor in detalhes_parseados[0].items():
+        lista.append(valor)
 
 
 def create_send_db():
@@ -38,28 +38,15 @@ def create_send_db():
                  'telefones text, emails text, horario_funcionamento text, msg text)'
     cur.execute(sql_create)
 
-    sql_envia_dados = ('INSERT INTO Dados (cd_ua, sigla_ua, nome_ua, titular, cargo , cd_ua_pai, cd_ua_basica, nome_ua_basica,'
-                'sigla_ua_basica, nat_juridica, ordem_ua_basica, ordem_absoluta, ordem_relativa, tipo_logradouro, '
-                'nome_logradouro, trechamento_CEP, nome_logradouro_abreviado, nro, complemento, bairro, bairro_abreviado,'
-                'localidade, CEP, telefones, emails, horario_funcionamento, msg) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '
-                '?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (detalhes_parseados[0], detalhes_parseados[1],
-                                                                    detalhes_parseados[2], detalhes_parseados[3],
-                                                                    detalhes_parseados[4], detalhes_parseados[5],
-                                                                    detalhes_parseados[6], detalhes_parseados[7],
-                                                                    detalhes_parseados[8], detalhes_parseados[9],
-                                                                    detalhes_parseados[10], detalhes_parseados[11],
-                                                                    detalhes_parseados[12], detalhes_parseados[13],
-                                                                    detalhes_parseados[14], detalhes_parseados[15],
-                                                                    detalhes_parseados[16], detalhes_parseados[17],
-                                                                    detalhes_parseados[18], detalhes_parseados[19],
-                                                                    detalhes_parseados[20], detalhes_parseados[21],
-                                                                    detalhes_parseados[22], detalhes_parseados[23],
-                                                                    detalhes_parseados[24], detalhes_parseados[25],
-                                                                    detalhes_parseados[26]))
-
-
-    cur.execute(sql_envia_dados)
-
+    cur.execute('INSERT INTO Dados (cd_ua, sigla_ua, nome_ua, titular, cargo , cd_ua_pai, cd_ua_basica, nome_ua_basica,'\
+                'sigla_ua_basica, nat_juridica, ordem_ua_basica, ordem_absoluta, ordem_relativa, tipo_logradouro,'\
+                'nome_logradouro, trechamento_CEP, nome_logradouro_abreviado, nro, complemento, bairro, bairro_abreviado,'\
+                'localidade, CEP, telefones, emails, horario_funcionamento, msg) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,'\
+                '?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (lista[0], lista[1], lista[2], lista[3], lista[4], lista[5],
+                                                              lista[6], lista[7], lista[8], lista[9], lista[10], lista[11],
+                                                              lista[12], lista[13], lista[14], lista[15], lista[16], lista[17],
+                                                              lista[18], lista[19], lista[20], lista[21], lista[22], lista[23],
+                                                              lista[24], lista[25], lista[26]))
     return con, cur
 
 
@@ -67,6 +54,7 @@ def close_db(con, cur):
     con.commit()
     cur.close()
     con.close()
+
 
 def main():
     con, cur = create_send_db()
