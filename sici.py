@@ -1,136 +1,100 @@
 from zeep import Client
-import os
-import sqlite3
 from tqdm import tqdm
-from datetime import datetime
 
-os.remove('SICI.db') if os.path.exists('SICI.db') else None
-con = sqlite3.connect('SICI.db')
-cur = con.cursor()
-con.commit()
+from sici_site.models import Dados 
 
-sql_create = 'create table Dados (id integer IDENTITY(1,1) primary key, cd_ua integer, sigla_ua nvarchar(100), nome_ua nvarchar(255), titular nvarchar(255),'\
-           'cargo nvarchar(255), cd_ua_pai integer, cd_ua_basica integer, nome_ua_basica nvarchar(255), sigla_ua_basica nvarchar(255),'\
-           'nat_juridica integer, ordem_ua_basica integer, ordem_absoluta integer, ordem_relativa integer,'\
-           'tipo_logradouro nvarchar(255), nome_logradouro nvarchar(500), trechamento_CEP nvarchar(500), nome_logradouro_abreviado nvarchar(500),'\
-           'nro integer, complemento nvarchar(255), bairro nvarchar(255), bairro_abreviado nvarchar(255), localidade nvarchar(255), CEP nvarchar(255),'\
-           'telefones nvarchar(1000), emails nvarchar(1000), horario_funcionamento nvarchar(255), msg text, data_criacao_registro datetime)'
-
-cur.execute(sql_create)
-con.commit()
-
-def close_db(con, cur):
-    con.commit()
-    cur.close()
-    con.close()
-
-lista_chave = []
-lista_valor = []
-lista_final = []
+consumidor = ''
+chaveAcesso = ''
 
 client = Client('http://sici.rio.rj.gov.br/Servico/WebServiceSICI.asmx?wsdl')
+retorno = client.service.Get_Arvore_UA(Codigo_UA='', Nivel='', Tipo_Arvore='', consumidor=consumidor, chaveAcesso=chaveAcesso)
 
-retorno = client.service.Get_Arvore_UA(Codigo_UA='', Nivel='', Tipo_Arvore='', consumidor='', chaveAcesso='')
+codigos_ua = []
+for item in retorno:
+    for campo in item:
+        if campo.tag == 'cd_ua' and campo.text != '' and campo.text != 'None':
+            codigos_ua.append(campo.text) 
 
-arvore = [{campo.tag: campo.text for campo in item} for item in retorno]
-
-iterador = tqdm(arvore)
-
-for folha in arvore:
-    iterador.set_description(folha['nome_ua'])
+iterador = tqdm(codigos_ua)
+for unidade in codigos_ua:
+    iterador.set_description(unidade)
+    
     detalhes = client.service.Get_Titular_Endereco_UA(
-        chaveAcesso='',
-        consumidor='',
-        Codigo_UA=folha['cd_ua']
+        chaveAcesso=chaveAcesso,
+        consumidor=consumidor,
+        Codigo_UA=unidade
     )
-    detalhes_parseados = [{campo.tag:campo.text for campo in item} for item in detalhes]
-    folha['titularidade'] = detalhes_parseados[0]
 
-    for chave, valor in detalhes_parseados[0].items():
-        lista_chave.append(chave)
-        if valor != None:
+    detalhes_parseados = [[campo.text for campo in item] for item in detalhes]
+    
+    lista_valor = []
+    for valor in detalhes_parseados[0]:
+        if valor != None and valor != 'None' and valor != '':
             lista_valor.append(valor)
         else:
-            lista_valor.append('')
+            lista_valor.append(None)
 
-    if len(lista_valor) == 27 and lista_valor[0] != '':
-        print(len(lista_valor), lista_valor)
-        selecao_cd_ua = cur.execute('SELECT cd_ua, sigla_ua, nome_ua, titular, cargo , cd_ua_pai, cd_ua_basica,'
-                            ' nome_ua_basica, sigla_ua_basica, nat_juridica, ordem_ua_basica, ordem_absoluta, ordem_relativa,'
-                            ' tipo_logradouro, nome_logradouro, trechamento_CEP, nome_logradouro_abreviado, nro, complemento,'
-                            ' bairro, bairro_abreviado, localidade, CEP, telefones, emails, horario_funcionamento, msg FROM Dados WHERE cd_ua=' + lista_valor[int(0)])
-        for x in selecao_cd_ua:
-            if x != None:
-                lista_final = [str(y) if y != None else str(y) for y in x]
+    if len(lista_valor) == 27 and lista_valor[0] != None:
+        lista_final = Dados.objects.filter(cd_ua=lista_valor[0]).values_list(
+                    'cd_ua', 'sigla_ua', 'nome_ua', 'titular', 'cargo' , 'cd_ua_pai', 'cd_ua_basica', 'nome_ua_basica',
+                    'sigla_ua_basica', 'nat_juridica', 'ordem_ua_basica', 'ordem_absoluta', 'ordem_relativa', 'tipo_logradouro',
+                    'nome_logradouro', 'trechamento_cep', 'nome_logradouro_abreviado', 'nro', 'complemento', 'bairro', 
+                    'bairro_abreviado', 'localidade', 'cep', 'telefones', 'emails', 'horario_funcionamento', 'msg'
+                    ).last()
 
-        if len(lista_final) == 0:
-            print(len(lista_final), lista_final)
+        iguais = True
+        if lista_final is None:
+            iguais = False
             print(len(lista_valor), lista_valor)
             print('Lista Final = 0 27 - 1')
-            cur.execute('INSERT INTO Dados (cd_ua, sigla_ua, nome_ua, titular, cargo , cd_ua_pai, cd_ua_basica,'
-                        ' nome_ua_basica, sigla_ua_basica, nat_juridica, ordem_ua_basica, ordem_absoluta, ordem_relativa,'
-                        ' tipo_logradouro, nome_logradouro, trechamento_CEP, nome_logradouro_abreviado, nro, complemento,'
-                        ' bairro, bairro_abreviado, localidade, CEP, telefones, emails, horario_funcionamento, msg, data_criacao_registro)'
-                        ' VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                        (lista_valor[0], lista_valor[1], lista_valor[2], lista_valor[3], lista_valor[4],
-                         lista_valor[5],
-                         lista_valor[6], lista_valor[7], lista_valor[8], lista_valor[9], lista_valor[10],
-                         lista_valor[11],
-                         lista_valor[12], lista_valor[13], lista_valor[14], lista_valor[15], lista_valor[16],
-                         lista_valor[17],
-                         lista_valor[18], lista_valor[19], lista_valor[20], lista_valor[21], lista_valor[22],
-                         lista_valor[23],
-                         lista_valor[24], lista_valor[25], lista_valor[26], datetime.now()))
-            con.commit()
-            lista_valor.clear()
-            lista_final.clear()
 
-        elif lista_valor == lista_final:
+        else:
+            for i in range(len(lista_final)):
+                if str(lista_valor[i]) != str(lista_final[i]):
+                    iguais = False
+                    break
             print(len(lista_final), lista_final)
             print(len(lista_valor), lista_valor)
+
+
+        if iguais:
             print('Lista Final = Lista String 27 - 2')
-            lista_valor.clear()
-            lista_final.clear()
+            
         else:
+            print('Lista Final diferente da lista string 27 - 4')
 
-            if lista_final[17] == '0' or lista_final[17] == 0 and lista_valor[17] == '':
-                print('Lista Final diferente da lista string 27 - 3')
-                print(len(lista_final), lista_final)
-                print(len(lista_valor), lista_valor)
-                lista_valor.clear()
-                lista_final.clear()
+            inserir = Dados(
+                cd_ua=lista_valor[0],
+                sigla_ua=lista_valor[1],
+                nome_ua=lista_valor[2],
+                titular=lista_valor[3],
+                cargo=lista_valor[4],
+                cd_ua_pai=lista_valor[5],
+                cd_ua_basica=lista_valor[6],
+                nome_ua_basica=lista_valor[7],
+                sigla_ua_basica=lista_valor[8],
+                nat_juridica=lista_valor[9],
+                ordem_ua_basica=lista_valor[10],
+                ordem_absoluta=lista_valor[11],
+                ordem_relativa=lista_valor[12],
+                tipo_logradouro=lista_valor[13],
+                nome_logradouro=lista_valor[14],
+                trechamento_cep=lista_valor[15],
+                nome_logradouro_abreviado=lista_valor[16],
+                nro=lista_valor[17],
+                complemento=lista_valor[18],
+                bairro=lista_valor[19],
+                bairro_abreviado=lista_valor[20],
+                localidade=lista_valor[21],
+                cep=lista_valor[22],
+                telefones=lista_valor[23],
+                emails=lista_valor[24],
+                horario_funcionamento=lista_valor[25],
+                msg=lista_valor[26]
+            )
+            inserir.save()
 
-            else:
-                print(len(lista_final), lista_final)
-                print(len(lista_valor), lista_valor)
-                print('Lista Final diferente da lista string 27 - 4')
-                cur.execute('INSERT INTO Dados (cd_ua, sigla_ua, nome_ua, titular, cargo , cd_ua_pai, cd_ua_basica,'
-                            ' nome_ua_basica, sigla_ua_basica, nat_juridica, ordem_ua_basica, ordem_absoluta, ordem_relativa,'
-                            ' tipo_logradouro, nome_logradouro, trechamento_CEP, nome_logradouro_abreviado, nro, complemento,'
-                            ' bairro, bairro_abreviado, localidade, CEP, telefones, emails, horario_funcionamento, msg, data_criacao_registro)'
-                            ' VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                            (lista_valor[0], lista_valor[1], lista_valor[2], lista_valor[3], lista_valor[4],
-                             lista_valor[5],
-                             lista_valor[6], lista_valor[7], lista_valor[8], lista_valor[9], lista_valor[10],
-                             lista_valor[11],
-                             lista_valor[12], lista_valor[13], lista_valor[14], lista_valor[15], lista_valor[16],
-                             lista_valor[17],
-                             lista_valor[18], lista_valor[19], lista_valor[20], lista_valor[21], lista_valor[22],
-                             lista_valor[23],
-                             lista_valor[24], lista_valor[25], lista_valor[26], datetime.now()))
-                con.commit()
-                lista_valor.clear()
-                lista_final.clear()
-
-    elif lista_valor[0] == '':
-        lista_valor.clear()
-        lista_final.clear()
-
-    elif len(lista_valor) < 27 or len(lista_valor) > 27:
+    else:
+        print("erro")
         with open('Log_erros.txt', 'a', encoding='utf-8') as f:
             f.write(str(lista_valor) + '\n')
-        lista_valor.clear()
-
-    continue
-
-close_db(con, cur)
