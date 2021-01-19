@@ -1,5 +1,5 @@
 # SICI_Scraping
-  Projeto integrado ao sici para a atalização do banco de dados do mesmo.
+  Projeto integrado ao <a href="https://github.com/danielcdl/Projeto_Sici">sici</a> para a atalização do banco de dados do mesmo.
 
   Para atualizar o banco, o arquivo sici.py deve estar no diretorio principal do projeto. Depois deve-se entrar no shell do django através do comando: 
   python manage.py shell
